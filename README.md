@@ -281,3 +281,5 @@ Ship є Entity → extends.
 Bullet має homing → поле.
 Pickup має pickupBehavior → поле.
 
+Фінальний результат: 
+![alt text](image.png)
