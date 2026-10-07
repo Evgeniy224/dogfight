@@ -1,0 +1,86 @@
+/**
+ * Світ гри. Тримає всі сутності у Map<id, Entity>.
+ * Відповідає за оновлення, видалення мертвих і надання доступу до сутностей.
+ */
+export class World {
+  // Приватне сховище: id -> Entity
+  #entities = new Map();
+
+  // Черга на видалення (id сутностей, які треба прибрати в кінці кроку)
+  #pendingRemoval = [];
+
+  /** Додати сутність у світ. */
+  spawn(entity) {
+    this.#entities.set(entity.id, entity);
+    return entity;
+  }
+
+  /** Позначити сутність як мертву (видалиться в кінці кроку). */
+  despawn(id) {
+    this.#pendingRemoval.push(id);
+  }
+
+  /** Отримати сутність за id. */
+  get(id) {
+    return this.#entities.get(id);
+  }
+
+  /** Кількість сутностей. */
+  get size() {
+    return this.#entities.size;
+  }
+
+  /** Ітератор по всіх сутностях (для `for...of world`). */
+  *[Symbol.iterator]() {
+    yield* this.#entities.values();
+  }
+
+  /** Ітератор лише по сутностях певного типу (kind). */
+  *ofKind(kind) {
+    for (const e of this) {
+      if (e.kind === kind) yield e;
+    }
+  }
+
+  /**
+   * Один крок симуляції:
+   * 1. Оновити всі сутності.
+   * 2. Обробити колізії.
+   * 3. Прибрати мертвих.
+   *
+   * @param {number} dt - фіксований крок (1/60)
+   * @param {object} input - для корабля гравця
+   * @param {number} viewWidth
+   * @param {number} viewHeight
+   */
+  step(dt, input, viewWidth, viewHeight) {
+    // 1. Оновлення
+    for (const e of this.#entities.values()) {
+      e.update(dt, input, viewWidth, viewHeight);
+    }
+
+    // 2. Колізії (у M3)
+    // this.#resolveCollisions();
+
+    // 3. Sweep — прибираємо мертвих
+    this.#sweep();
+  }
+
+  /**
+   * Прибирає сутності, які позначені як мертві або були додані в pendingRemoval.
+   * Робимо це в кінці кроку, щоб не мутувати Map під час ітерації.
+   */
+  #sweep() {
+    // Спершу — ті, хто сам себе позначив мертвим (this.alive = false)
+    for (const [id, e] of this.#entities) {
+      if (!e.alive) {
+        this.#entities.delete(id);
+      }
+    }
+    // Потім — ті, хто у pendingRemoval
+    for (const id of this.#pendingRemoval) {
+      this.#entities.delete(id);
+    }
+    this.#pendingRemoval.length = 0;
+  }
+}

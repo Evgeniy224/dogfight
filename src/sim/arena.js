@@ -1,14 +1,14 @@
 /**
- * Загортає координати корабля, якщо він вилітає за межі арени.
- * Корабель, що вилітає справа, з'являється зліва, і навпаки.
+ * Загортає позицію, якщо сутність вилітає за межі арени.
+ * Тепер приймає Vector2 (об'єкт з x, y), а не Entity.
  *
- * @param {object} ship - об'єкт корабля
- * @param {number} width - ширина арени в пікселях
- * @param {number} height - висота арени в пікселях
+ * @param {Vector2} pos - позиція сутності
+ * @param {number} width
+ * @param {number} height
  */
-export function wrapAround(ship, width, height) {
-  if (ship.x < 0) ship.x += width;
-  if (ship.x > width) ship.x -= width;
-  if (ship.y < 0) ship.y += height;
-  if (ship.y > height) ship.y -= height;
+export function wrapAround(pos, width, height) {
+  if (pos.x < 0) pos.x += width;
+  if (pos.x > width) pos.x -= width;
+  if (pos.y < 0) pos.y += height;
+  if (pos.y > height) pos.y -= height;
 }

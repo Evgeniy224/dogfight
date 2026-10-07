@@ -1,64 +1,86 @@
-/**
- * Створює новий корабель з початковим станом.
- */
-export function createShip(x, y) {
-  return {
-    // Позиція
-    x,
-    y,
-    // Швидкість
-    vx: 0,
-    vy: 0,
-    // Кут повороту в радіанах (0 = вправо)
-    angle: 0,
-    // Чи застосовується тяга
-    thrust: false,
-  };
-}
+import { Entity } from './entity.js';
+import { Vector2 } from './vector.js';
+import { Bullet } from './bullet.js';
 
-// --- Константи фізики ---
-const ROTATION_SPEED = 4.0;   // рад/сек — швидкість повороту
-const THRUST_POWER = 400;     // пікселів/сек² — прискорення при тязі
-const DRAG = 1.5;             // коефіцієнт тертя (чим більше — тим швидше гальмує)
-const MAX_SPEED = 500;        // максимальна швидкість (пікселів/сек)
+export class Ship extends Entity {
+  static ROTATION_SPEED = 4.0;
+  static THRUST_POWER = 400;
+  static DRAG = 1.5;
+  static MAX_SPEED = 500;
 
-/**
- * Оновлює стан корабля на основі введення та часу.
- * Це ЧИСТА функція — вона не торкається DOM, canvas чи чогось іншого.
- *
- * @param {object} ship - об'єкт корабля
- * @param {object} input - об'єкт з методами isDown(code)
- * @param {number} dt - фіксований крок часу в секундах (завжди 1/60)
- */
-export function integrate(ship, input, dt) {
-  // --- 1. Поворот ---
-  if (input.isDown('ArrowLeft') || input.isDown('KeyA')) {
-    ship.angle -= ROTATION_SPEED * dt;
-  }
-  if (input.isDown('ArrowRight') || input.isDown('KeyD')) {
-    ship.angle += ROTATION_SPEED * dt;
+  #hp = 100;
+
+  constructor(x, y) {
+    super(x, y);
+    this.kind = 'ship';
+    this.radius = 15;
+    this.thrust = false;
+    this.cooldown = 0;
+    this.shield = 0;      // секунди захисту
+    this.rapidFire = 0;   // секунди швидкої стрільби
   }
 
-  // --- 2. Тяга ---
-  ship.thrust = input.isDown('ArrowUp') || input.isDown('KeyW');
-  if (ship.thrust) {
-    ship.vx += Math.cos(ship.angle) * THRUST_POWER * dt;
-    ship.vy += Math.sin(ship.angle) * THRUST_POWER * dt;
+  get hp() {
+    return this.#hp;
   }
 
-  // --- 3. Тертя (drag) — експоненційне згасання швидкості ---
-  const dragFactor = Math.exp(-DRAG * dt);
-  ship.vx *= dragFactor;
-  ship.vy *= dragFactor;
-
-  // --- 4. Обмеження максимальної швидкості ---
-  const speed = Math.hypot(ship.vx, ship.vy);
-  if (speed > MAX_SPEED) {
-    ship.vx = (ship.vx / speed) * MAX_SPEED;
-    ship.vy = (ship.vy / speed) * MAX_SPEED;
+  takeDamage(amount) {
+    if (this.shield > 0) {
+      return false; // shield блокує всю шкоду
+    }
+    this.#hp -= amount;
+    if (this.#hp <= 0) {
+      this.#hp = 0;
+      this.kill();
+      return true;
+    }
+    return false;
   }
 
-  // --- 5. Оновлення позиції ---
-  ship.x += ship.vx * dt;
-  ship.y += ship.vy * dt;
+  update(dt, input) {
+    if (input.isDown('ArrowLeft') || input.isDown('KeyA')) {
+      this.angle -= Ship.ROTATION_SPEED * dt;
+    }
+    if (input.isDown('ArrowRight') || input.isDown('KeyD')) {
+      this.angle += Ship.ROTATION_SPEED * dt;
+    }
+
+    // Таймери ефектів
+    if (this.shield > 0) this.shield -= dt;
+    if (this.rapidFire > 0) this.rapidFire -= dt;
+
+    this.thrust = input.isDown('ArrowUp') || input.isDown('KeyW');
+    if (this.thrust) {
+      const thrustVec = Vector2.fromAngle(this.angle, Ship.THRUST_POWER * dt);
+      this.vel.x += thrustVec.x;
+      this.vel.y += thrustVec.y;
+    }
+
+    const dragFactor = Math.exp(-Ship.DRAG * dt);
+    this.vel.x *= dragFactor;
+    this.vel.y *= dragFactor;
+
+    const speed = this.vel.length();
+    if (speed > Ship.MAX_SPEED) {
+      const scale = Ship.MAX_SPEED / speed;
+      this.vel.x *= scale;
+      this.vel.y *= scale;
+    }
+
+    this.pos.x += this.vel.x * dt;
+    this.pos.y += this.vel.y * dt;
+
+    if (this.cooldown > 0) this.cooldown -= dt;
+  }
+
+  /**
+   * Постріл. Створює Bullet з носа корабля.
+   * Повертає Bullet або null, якщо кулдаун ще не пройшов.
+   */
+  fire() {
+    if (this.cooldown > 0) return null;
+    this.cooldown = this.rapidFire > 0 ? 0.05 : 0.2; // швидше з rapidFire
+    const nose = Vector2.fromAngle(this.angle, this.radius).add(this.pos);
+    return new Bullet(nose.x, nose.y, this.angle, this.vel);
+  }
 }
