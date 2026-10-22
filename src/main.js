@@ -8,9 +8,12 @@ import { Pickup } from './sim/pickup.js';
 import { createHoming } from './sim/behaviors.js';
 import { loadAll, fetchJson } from './load.js';
 
-// === НОВІ ІМПОРТИ ДЛЯ ЗВУКУ ===
+// === ЗВУК ===
 import { setAudioContext, setBuffer, unlockAudio } from './audio.js';
 import { events } from './events.js';
+
+// === ЛОБІ ===
+import { Lobby } from './lobby.js';
 
 // --- Canvas ---
 const canvas = document.getElementById('game');
@@ -89,10 +92,22 @@ async function start() {
   window.addEventListener('click', unlockAudio, { once: true });
 
   loadingScreen.classList.add('hidden');
-  initGame();
+
+  // === ЛОБІ ===
+  const lobby = new Lobby();
+  lobby.addEventListener('join', (e) => {
+    const { room, playerName } = e.detail;
+    console.log('Joining room:', room.name, 'as', playerName);
+    // Налаштування арени на основі кімнати
+    initGame(room);
+  });
+  await lobby.load();
 }
 
-function initGame() {
+function initGame(room) {
+  // Використовуємо room.name для HUD
+  const roomName = room?.name || 'Unknown';
+
   input = createInput(window);
 
   world = new World({
@@ -152,6 +167,7 @@ function initGame() {
 
   window.loop = loop;
   window.world = world;
+  window.roomName = roomName; // зберігаємо для HUD
 }
 
 function spawnAsteroid() {
@@ -236,7 +252,8 @@ function render(alpha) {
     hp: ${ship.hp}<br>
     entities: ${world.size}<br>
     <br>
-    <span style="color: yellow; font-size: 18px;">SCORE: ${score}</span>
+    <span style="color: yellow; font-size: 18px;">SCORE: ${score}</span><br>
+    <span style="color: #888;">Room: ${window.roomName || 'Unknown'}</span>
     ${!ship.alive ? `<br><span style="color: red;">RESPAWN IN ${(2 - respawnTimer).toFixed(1)}s</span>` : ''}
   `;
 }

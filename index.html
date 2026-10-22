@@ -8,6 +8,7 @@
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #111; }
       canvas { display: block; }
+      
       #hud {
         position: fixed;
         top: 10px;
@@ -22,7 +23,8 @@
         user-select: none;
         line-height: 1.4;
       }
-      #loading-screen {
+
+      #loading-screen, #lobby-screen {
         position: fixed;
         inset: 0;
         background: #111;
@@ -34,7 +36,8 @@
         font-family: monospace;
         z-index: 100;
       }
-      #loading-screen.hidden { display: none; }
+      .hidden { display: none !important; }
+
       #progress-bar {
         width: 300px;
         height: 20px;
@@ -48,20 +51,60 @@
         transition: width 0.1s;
       }
       #progress-text { margin-top: 10px; }
-      button {
-        padding: 10px 20px;
+
+      #rooms-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
         margin-top: 20px;
-        font-size: 16px;
+      }
+      .room-btn {
+        padding: 10px 20px;
+        background: #222;
+        border: 2px solid #444;
+        color: #fff;
+        font-family: monospace;
+        cursor: pointer;
+      }
+      .room-btn:hover { background: #333; }
+      .room-btn.selected { border-color: #4af; background: #1a3a5a; }
+      #player-name {
+        padding: 8px;
+        background: #222;
+        border: 2px solid #444;
+        color: #fff;
+        font-family: monospace;
+      }
+      #join-btn {
+        padding: 10px 20px;
+        background: #4af;
+        border: none;
+        color: #000;
+        font-weight: bold;
+        font-family: monospace;
         cursor: pointer;
       }
     </style>
   </head>
   <body>
+    <!-- Екран завантаження -->
     <div id="loading-screen">
       <h1>Loading...</h1>
       <div id="progress-bar"><div id="progress-fill"></div></div>
       <p id="progress-text">0 / 0</p>
     </div>
+
+    <!-- Екран лобі (окремо, не всередині loading!) -->
+    <div id="lobby-screen" class="hidden">
+      <h1>Dogfight</h1>
+      <p>Choose a room:</p>
+      <div id="rooms-list"></div>
+      <div style="margin-top: 20px;">
+        <input type="text" id="player-name" placeholder="Your name" value="Player" />
+        <button id="join-btn">Join</button>
+      </div>
+    </div>
+
     <canvas id="game"></canvas>
     <div id="hud"></div>
     <script type="module" src="/src/main.js"></script>

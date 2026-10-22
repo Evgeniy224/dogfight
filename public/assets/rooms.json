@@ -1,0 +1,7 @@
+{
+  "rooms": [
+    { "id": "alpha", "name": "Alpha Arena", "players": 3, "maxPlayers": 8 },
+    { "id": "beta", "name": "Beta Station", "players": 5, "maxPlayers": 8 },
+    { "id": "gamma", "name": "Gamma Nebula", "players": 2, "maxPlayers": 8 }
+  ]
+}
