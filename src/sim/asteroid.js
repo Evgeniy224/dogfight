@@ -26,7 +26,7 @@ export class Asteroid extends Entity {
     this.vel.x = vx;
     this.vel.y = vy;
     this.angle = 0;
-    this.angularVel = (Math.random() - 0.5) * 1.5; // легке обертання
+    this.angularVel = (Math.random() - 0.2) * 0.1; // легке обертання
   }
 
   get hp() {

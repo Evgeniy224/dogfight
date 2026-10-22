@@ -1,13 +1,9 @@
 import { Entity } from './entity.js';
 
-/**
- * Куля. Має TTL (time-to-live) — автоматично зникає через певний час.
- * Рухається по прямій, завдає шкоди при зіткненні.
- */
 export class Bullet extends Entity {
-  static TTL = 2.0;      // секунд до самознищення
-  static DAMAGE = 25;    // шкода
-  static SPEED = 600;    // пікселів/с
+  static TTL = 2.0;
+  static DAMAGE = 25;
+  static SPEED = 600;
 
   constructor(x, y, angle, inheritVel = null) {
     super(x, y);
@@ -16,7 +12,6 @@ export class Bullet extends Entity {
     this.angle = angle;
     this.ttl = Bullet.TTL;
 
-    // Швидкість: у напрямку кута + успадкована від корабля
     this.vel.x = Math.cos(angle) * Bullet.SPEED;
     this.vel.y = Math.sin(angle) * Bullet.SPEED;
     if (inheritVel) {
@@ -25,10 +20,22 @@ export class Bullet extends Entity {
     }
 
     this.damage = Bullet.DAMAGE;
+
+    // === КОМПОЗИЦІЯ ===
+    // Якщо задано — куля буде наводитися на ціль.
+    // За замовчуванням null (звичайна куля).
+    this.homing = null;
   }
 
   update(dt) {
-    super.update(dt); // Рухаємось
+    super.update(dt);
+
+    // === КОМПОЗИЦІЯ ===
+    // Якщо є поведінка homing — застосовуємо її.
+    if (this.homing && this.homingTarget) {
+      this.homing.update(this, this.homingTarget, dt);
+    }
+
     this.ttl -= dt;
     if (this.ttl <= 0) {
       this.kill();
@@ -39,7 +46,7 @@ export class Bullet extends Entity {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
     ctx.rotate(this.angle);
-    ctx.fillStyle = '#ff0';
+    ctx.fillStyle = this.homing ? '#f0f' : '#ff0'; // фіолетовий для homing
     ctx.fillRect(-4, -2, 8, 4);
     ctx.restore();
   }

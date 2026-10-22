@@ -3,22 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dogfight — Lab 01</title>
+    <title>Dogfight — Lab 03</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html, body {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #111;
-      }
-      canvas {
-        display: block;
-      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #111; }
+      canvas { display: block; }
       #hud {
         position: fixed;
         top: 10px;
@@ -33,9 +22,46 @@
         user-select: none;
         line-height: 1.4;
       }
+      #loading-screen {
+        position: fixed;
+        inset: 0;
+        background: #111;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-family: monospace;
+        z-index: 100;
+      }
+      #loading-screen.hidden { display: none; }
+      #progress-bar {
+        width: 300px;
+        height: 20px;
+        border: 2px solid #444;
+        margin-top: 20px;
+      }
+      #progress-fill {
+        height: 100%;
+        background: #4af;
+        width: 0%;
+        transition: width 0.1s;
+      }
+      #progress-text { margin-top: 10px; }
+      button {
+        padding: 10px 20px;
+        margin-top: 20px;
+        font-size: 16px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
+    <div id="loading-screen">
+      <h1>Loading...</h1>
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <p id="progress-text">0 / 0</p>
+    </div>
     <canvas id="game"></canvas>
     <div id="hud"></div>
     <script type="module" src="/src/main.js"></script>

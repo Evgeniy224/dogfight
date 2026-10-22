@@ -6,11 +6,11 @@ import { Asteroid } from './sim/asteroid.js';
 import { Explosion } from './sim/explosion.js';
 import { Pickup } from './sim/pickup.js';
 import { createHoming } from './sim/behaviors.js';
+import { loadAll, fetchJson } from './load.js';
 
 // --- Canvas ---
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-
 let viewWidth = window.innerWidth;
 let viewHeight = window.innerHeight;
 
@@ -24,38 +24,115 @@ function resizeCanvas() {
   canvas.style.height = `${viewHeight}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 // --- HUD ---
 const hudElement = document.getElementById('hud');
 
-// --- Введення ---
-const input = createInput(window);
+// --- Loading UI ---
+const loadingScreen = document.getElementById('loading-screen');
+const progressFill = document.getElementById('progress-fill');
+const progressText = document.getElementById('progress-text');
 
-// --- Рахунок ---
-let score = 0;
+// --- Глобальні ресурси ---
+let assets = null; // { images, sounds }
 
-// --- Світ ---
-const world = new World({
-  onExplosion: (x, y, r) => {
-    world.spawn(new Explosion(x, y, r));
-  },
-  onScore: (points) => {
-    score += points;
-  },
-});
-
-// === ДЕМО КОМПОЗИЦІЇ: homing-куля ===
-// Кожен 5-й постріл буде homing
+// --- Стан гри ---
+let world, ship, input, score = 0, respawnTimer = 0;
+let prevShip = null;
+let loop = null;
 let shotCounter = 0;
 
-// --- Корабель ---
-let ship = world.spawn(new Ship(viewWidth / 2, viewHeight / 2));
-let respawnTimer = 0;
+// --- Старт: завантаження, потім гра ---
+async function start() {
+  let manifest;
+  try {
+    manifest = await fetchJson('/assets/manifest.json');
+  } catch (e) {
+    console.error('Failed to load manifest:', e);
+    loadingScreen.innerHTML = '<h1 style="color:red;">Failed to load manifest</h1><button onclick="location.reload()">Retry</button>';
+    return;
+  }
 
-// --- Астероїди ---
+  try {
+    assets = await loadAll(manifest, (loaded, total) => {
+      const percent = (loaded / total) * 100;
+      progressFill.style.width = `${percent}%`;
+      progressText.textContent = `${loaded} / ${total}`;
+    });
+  } catch (e) {
+    console.error('Failed to load assets:', e);
+    loadingScreen.innerHTML = '<h1 style="color:red;">Failed to load assets</h1><button onclick="location.reload()">Retry</button>';
+    return;
+  }
+
+  loadingScreen.classList.add('hidden');
+  initGame();
+}
+
+function initGame() {
+  input = createInput(window);
+
+  world = new World({
+    onExplosion: (x, y, r) => {
+      world.spawn(new Explosion(x, y, r));
+    },
+    onScore: (points) => {
+      score += points;
+    },
+  });
+
+  ship = world.spawn(new Ship(viewWidth / 2, viewHeight / 2));
+  respawnTimer = 0;
+  shotCounter = 0;
+
+  for (let i = 0; i < 12; i++) spawnAsteroid();
+
+  world.spawn(new Pickup(viewWidth * 0.3, viewHeight * 0.3, 'shield'));
+  world.spawn(new Pickup(viewWidth * 0.7, viewHeight * 0.7, 'rapid_fire'));
+
+  prevShip = {
+    x: ship.pos.x,
+    y: ship.pos.y,
+    angle: ship.angle,
+    thrust: ship.thrust,
+  };
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && ship.alive) {
+      const bullet = ship.fire();
+      if (bullet) {
+        shotCounter++;
+        if (shotCounter % 5 === 0) {
+          bullet.homing = createHoming(4.0);
+          let nearest = null;
+          let nearestDist = Infinity;
+          for (const ast of world.ofKind('asteroid')) {
+            const d = Math.hypot(ast.pos.x - ship.pos.x, ast.pos.y - ship.pos.y);
+            if (d < nearestDist) {
+              nearestDist = d;
+              nearest = ast;
+            }
+          }
+          bullet.homingTarget = nearest;
+        }
+        world.spawn(bullet);
+      }
+    }
+  });
+
+  loop = createLoop({
+    step: 1 / 60,
+    simulate,
+    render,
+  });
+  loop.start();
+
+  window.loop = loop;
+  window.world = world;
+}
+
 function spawnAsteroid() {
   let x, y;
   do {
@@ -68,84 +145,22 @@ function spawnAsteroid() {
   world.spawn(new Asteroid(x, y, vx, vy, Math.floor(Math.random() * 3)));
 }
 
-for (let i = 0; i < 8; i++) spawnAsteroid();
-
-// --- Pickup для тесту ---
-world.spawn(new Pickup(viewWidth * 0.3, viewHeight * 0.3, 'shield'));
-world.spawn(new Pickup(viewWidth * 0.7, viewHeight * 0.7, 'rapid_fire'));
-
-// --- Стрільба ---
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && ship.alive) {
-    const bullet = ship.fire();
-    if (bullet) {
-      // === КОМПОЗИЦІЯ: кожен 5-й постріл — homing ===
-      shotCounter++;
-      if (shotCounter % 5 === 0) {
-        bullet.homing = createHoming(4.0);
-        // Знаходимо найближчий астероїд
-        let nearest = null;
-        let nearestDist = Infinity;
-        for (const ast of world.ofKind('asteroid')) {
-          const d = Math.hypot(ast.pos.x - ship.pos.x, ast.pos.y - ship.pos.y);
-          if (d < nearestDist) {
-            nearestDist = d;
-            nearest = ast;
-          }
-        }
-        bullet.homingTarget = nearest;
-      }
-      world.spawn(bullet);
-    }
-  }
-});
-
-// --- Інтерполяція корабля ---
-let prevShip = {
-  x: ship.pos.x,
-  y: ship.pos.y,
-  angle: ship.angle,
-  thrust: ship.thrust,
-};
-
-let spawnTimer = 0;
-
-// --- Симуляція ---
 function simulate(dt) {
   if (ship.alive) {
     prevShip.x = ship.pos.x;
     prevShip.y = ship.pos.y;
     prevShip.angle = ship.angle;
     prevShip.thrust = ship.thrust;
-
-     // Спавн нових астероїдів кожні 3 секунди
-  spawnTimer += dt;
-  if (spawnTimer >= 8) {
-    spawnTimer = 0;
-    if (world.ofKind('asteroid').next().done === false || countAsteroids() < 15) {
-      spawnAsteroid();
-    }
-  }
-
-  input.endFrame();
-}
-
-function countAsteroids() {
-  let n = 0;
-  for (const _ of world.ofKind('asteroid')) n++;
-  return n;
   }
 
   world.step(dt, input, viewWidth, viewHeight);
 
-  // Загортання корабля
   if (ship.alive) {
     if (ship.pos.x < 0) ship.pos.x += viewWidth;
     if (ship.pos.x > viewWidth) ship.pos.x -= viewWidth;
     if (ship.pos.y < 0) ship.pos.y += viewHeight;
     if (ship.pos.y > viewHeight) ship.pos.y -= viewHeight;
   } else {
-    // Респавн
     respawnTimer += dt;
     if (respawnTimer >= 2) {
       respawnTimer = 0;
@@ -160,10 +175,7 @@ function countAsteroids() {
   input.endFrame();
 }
 
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
+function lerp(a, b, t) { return a + (b - a) * t; }
 function lerpAngle(a, b, t) {
   let diff = b - a;
   while (diff > Math.PI) diff -= Math.PI * 2;
@@ -174,16 +186,13 @@ function lerpAngle(a, b, t) {
 function render(alpha) {
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, viewWidth, viewHeight);
-
   drawGrid();
 
-  // Малюємо всі сутності (крім корабля)
   for (const e of world) {
     if (e.kind === 'ship') continue;
     e.draw(ctx);
   }
 
-  // Корабель з інтерполяцією
   if (ship.alive) {
     const interpShip = {
       x: lerp(prevShip.x, ship.pos.x, alpha),
@@ -194,7 +203,6 @@ function render(alpha) {
     drawShip(interpShip);
   }
 
-  // HUD
   const stats = loop.getStats();
   const speed = ship.vel.length();
   hudElement.innerHTML = `
@@ -206,9 +214,6 @@ function render(alpha) {
     speed: ${speed.toFixed(0)} px/s<br>
     hp: ${ship.hp}<br>
     entities: ${world.size}<br>
-        <br>
-    ${ship.shield > 0 ? `<span style="color: #4f4;">SHIELD: ${ship.shield.toFixed(1)}s</span><br>` : ''}
-    ${ship.rapidFire > 0 ? `<span style="color: #ff4;">RAPID FIRE: ${ship.rapidFire.toFixed(1)}s</span><br>` : ''}
     <br>
     <span style="color: yellow; font-size: 18px;">SCORE: ${score}</span>
     ${!ship.alive ? `<br><span style="color: red;">RESPAWN IN ${(2 - respawnTimer).toFixed(1)}s</span>` : ''}
@@ -220,14 +225,8 @@ function drawGrid() {
   ctx.lineWidth = 1;
   const step = 50;
   ctx.beginPath();
-  for (let x = 0; x < viewWidth; x += step) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, viewHeight);
-  }
-  for (let y = 0; y < viewHeight; y += step) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(viewWidth, y);
-  }
+  for (let x = 0; x < viewWidth; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, viewHeight); }
+  for (let y = 0; y < viewHeight; y += step) { ctx.moveTo(0, y); ctx.lineTo(viewWidth, y); }
   ctx.stroke();
 }
 
@@ -236,17 +235,14 @@ function drawShip(s) {
   ctx.translate(s.x, s.y);
   ctx.rotate(s.angle);
 
-  ctx.beginPath();
-  ctx.moveTo(15, 0);
-  ctx.lineTo(-10, -8);
-  ctx.lineTo(-10, 8);
-  ctx.closePath();
-
-  ctx.fillStyle = '#4af';
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  if (assets?.images?.ship) {
+    ctx.drawImage(assets.images.ship, -15, -15, 30, 30);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(15, 0); ctx.lineTo(-10, -8); ctx.lineTo(-10, 8); ctx.closePath();
+    ctx.fillStyle = '#4af'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  }
 
   if (s.thrust) {
     ctx.beginPath();
@@ -261,13 +257,5 @@ function drawShip(s) {
   ctx.restore();
 }
 
-const loop = createLoop({
-  step: 1 / 60,
-  simulate,
-  render,
-});
-
-loop.start();
-
-window.loop = loop;
-window.world = world;
+// --- Запуск ---
+start();
