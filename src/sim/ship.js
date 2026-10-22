@@ -1,6 +1,7 @@
 import { Entity } from './entity.js';
 import { Vector2 } from './vector.js';
 import { Bullet } from './bullet.js';
+import { events } from '../events.js';
 
 export class Ship extends Entity {
   static ROTATION_SPEED = 4.0;
@@ -73,14 +74,17 @@ export class Ship extends Entity {
     if (this.cooldown > 0) this.cooldown -= dt;
   }
 
-  /**
-   * Постріл. Створює Bullet з носа корабля.
-   * Повертає Bullet або null, якщо кулдаун ще не пройшов.
-   */
-  fire() {
+    fire() {
     if (this.cooldown > 0) return null;
-    this.cooldown = this.rapidFire > 0 ? 0.05 : 0.2; // швидше з rapidFire
+    this.cooldown = this.rapidFire > 0 ? 0.05 : 0.2;
+
     const nose = Vector2.fromAngle(this.angle, this.radius).add(this.pos);
+
+    // Подія "fired"
+    events.dispatchEvent(new CustomEvent('fired', {
+      detail: { x: nose.x, y: nose.y }
+    }));
+
     return new Bullet(nose.x, nose.y, this.angle, this.vel);
   }
 }

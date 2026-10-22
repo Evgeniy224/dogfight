@@ -1,3 +1,4 @@
+import { events } from '../events.js';
 /**
  * Система колізій. Наївна O(n²) — для кожної пари сутностей перевіряємо
  * перетин кіл. Для 100+ об'єктів це ок.
@@ -88,17 +89,25 @@ export function resolveCollisions(collisions, world, onExplosion, onScore) {
   }
 }
 
-function handleBulletHit(bullet, target, world, onExplosion, onScore) {
+function handleBulletHit(bullet, target, world, onExplosion, onScore, onSplitAsteroid) {
   if (!bullet.alive || !target.alive) return;
 
   bullet.kill();
 
+  // Подія "hit" (куля влучила)
+  events.dispatchEvent(new CustomEvent('hit', {
+    detail: { x: target.pos.x, y: target.pos.y }
+  }));
+
   const destroyed = target.takeDamage(bullet.damage);
   if (destroyed) {
-    // Вибух у позиції цілі
     onExplosion(target.pos.x, target.pos.y, target.radius);
 
-    // Рахунок, якщо астероїд
+    // Подія "exploded" (об'єкт знищено)
+    events.dispatchEvent(new CustomEvent('exploded', {
+      detail: { x: target.pos.x, y: target.pos.y, radius: target.radius }
+    }));
+
     if (target.kind === 'asteroid') {
       onScore(target.scoreValue);
     }
@@ -108,12 +117,16 @@ function handleBulletHit(bullet, target, world, onExplosion, onScore) {
 function handleShipAsteroid(ship, asteroid, world, onExplosion) {
   if (!ship.alive) return;
 
-  // Корабель отримує шкоду від астероїда, але не гине від одного удару
   const dmg = 20;
   ship.takeDamage(dmg);
-  // Астероїд теж руйнується
   asteroid.kill();
+
   onExplosion(asteroid.pos.x, asteroid.pos.y, asteroid.radius);
+
+  // Подія "exploded"
+  events.dispatchEvent(new CustomEvent('exploded', {
+    detail: { x: asteroid.pos.x, y: asteroid.pos.y, radius: asteroid.radius }
+  }));
 }
 
 function handlePickup(ship, pickup) {

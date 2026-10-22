@@ -8,6 +8,10 @@ import { Pickup } from './sim/pickup.js';
 import { createHoming } from './sim/behaviors.js';
 import { loadAll, fetchJson } from './load.js';
 
+// === НОВІ ІМПОРТИ ДЛЯ ЗВУКУ ===
+import { setAudioContext, setBuffer, unlockAudio } from './audio.js';
+import { events } from './events.js';
+
 // --- Canvas ---
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -36,7 +40,7 @@ const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 
 // --- Глобальні ресурси ---
-let assets = null; // { images, sounds }
+let assets = null;
 
 // --- Стан гри ---
 let world, ship, input, score = 0, respawnTimer = 0;
@@ -44,7 +48,7 @@ let prevShip = null;
 let loop = null;
 let shotCounter = 0;
 
-// --- Старт: завантаження, потім гра ---
+// --- Старт ---
 async function start() {
   let manifest;
   try {
@@ -66,6 +70,23 @@ async function start() {
     loadingScreen.innerHTML = '<h1 style="color:red;">Failed to load assets</h1><button onclick="location.reload()">Retry</button>';
     return;
   }
+
+  // === ДЕКОДУВАННЯ ЗВУКІВ ===
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    setAudioContext(audioCtx);
+    for (const [name, arrayBuffer] of Object.entries(assets.sounds)) {
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      setBuffer(name, audioBuffer);
+    }
+    console.log('Audio decoded:', Object.keys(assets.sounds));
+  } catch (e) {
+    console.warn('Audio decode failed:', e);
+  }
+
+  // === РОЗБЛОКУВАННЯ АУДІО ПРИ ПЕРШОМУ ЖЕСТІ ===
+  window.addEventListener('keydown', unlockAudio, { once: true });
+  window.addEventListener('click', unlockAudio, { once: true });
 
   loadingScreen.classList.add('hidden');
   initGame();
