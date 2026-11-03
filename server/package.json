@@ -1,0 +1,7 @@
+{
+  "name": "server",
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.22.1"
+  }
+}

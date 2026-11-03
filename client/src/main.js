@@ -96,9 +96,9 @@ async function start() {
   // === ЛОБІ ===
   const lobby = new Lobby();
   lobby.addEventListener('join', (e) => {
-    const { room, playerName } = e.detail;
+    const { room, playerName, ws } = e.detail;
     console.log('Joining room:', room.name, 'as', playerName);
-    // Налаштування арени на основі кімнати
+    window.ws = ws;
     initGame(room);
   });
   await lobby.load();
