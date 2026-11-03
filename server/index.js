@@ -26,10 +26,8 @@ class Room extends EventEmitter {
   leave(ws) {
     this.clients.delete(ws);
     this.emit('leave', { playerName: ws.playerName });
-    if (this.clients.size === 0) {
-      rooms.delete(this.id);
-      console.log(`Room ${this.id} deleted (empty)`);
-    }
+    // Кімната НЕ видаляється, навіть якщо порожня.
+    // Це дозволяє їй завжди бути в списку.
   }
 
   broadcast(message, exclude = null) {
@@ -43,8 +41,19 @@ class Room extends EventEmitter {
 }
 
 const rooms = new Map();
+
+// Створюємо стандартні кімнати при старті
 for (const id of ['alpha', 'beta', 'gamma']) {
   rooms.set(id, new Room(id));
+}
+
+// Допоміжна функція для створення кімнати (якщо раптом немає)
+function getOrCreateRoom(id) {
+  if (!rooms.has(id)) {
+    rooms.set(id, new Room(id));
+    console.log(`Room ${id} created on demand`);
+  }
+  return rooms.get(id);
 }
 
 // === HTTP-сервер ===
@@ -105,11 +114,10 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       clearTimeout(joinTimeout);
       const { roomId, playerName } = msg;
-      const room = rooms.get(roomId);
-      if (!room) {
-        ws.close(4002, 'Room not found');
-        return;
-      }
+      
+      // Використовуємо getOrCreateRoom, щоб кімната точно існувала
+      const room = getOrCreateRoom(roomId);
+      
       if (room.clients.size >= 8) {
         ws.close(4003, 'Room full');
         return;

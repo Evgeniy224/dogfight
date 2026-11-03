@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dogfight — Lab 03</title>
+    <title>Dogfight — Lab 04</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #111; }
@@ -84,6 +84,42 @@
         font-family: monospace;
         cursor: pointer;
       }
+
+      /* ЧАТ */
+      #chat-box {
+        position: fixed;
+        bottom: 10px;
+        left: 10px;
+        width: 300px;
+        height: 200px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        font-family: monospace;
+        font-size: 13px;
+        padding: 8px;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        z-index: 50;
+        border: 1px solid #444;
+      }
+      #chat-box.hidden { display: none !important; }
+      #chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        margin-bottom: 4px;
+        word-wrap: break-word;
+      }
+      #chat-messages div { margin: 2px 0; }
+      #chat-input {
+        padding: 4px;
+        background: #222;
+        border: 1px solid #444;
+        color: #fff;
+        font-family: monospace;
+        outline: none;
+      }
+      #chat-input:focus { border-color: #4af; }
     </style>
   </head>
   <body>
@@ -94,7 +130,7 @@
       <p id="progress-text">0 / 0</p>
     </div>
 
-    <!-- Екран лобі (окремо, не всередині loading!) -->
+    <!-- Екран лобі -->
     <div id="lobby-screen" class="hidden">
       <h1>Dogfight</h1>
       <p>Choose a room:</p>
@@ -107,6 +143,13 @@
 
     <canvas id="game"></canvas>
     <div id="hud"></div>
+
+    <!-- Чат (спочатку прихований) -->
+    <div id="chat-box" class="hidden">
+      <div id="chat-messages"></div>
+      <input type="text" id="chat-input" placeholder="Type a message... (Enter)" />
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

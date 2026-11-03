@@ -105,7 +105,6 @@ async function start() {
 }
 
 function initGame(room) {
-  // Використовуємо room.name для HUD
   const roomName = room?.name || 'Unknown';
 
   input = createInput(window);
@@ -167,7 +166,48 @@ function initGame(room) {
 
   window.loop = loop;
   window.world = world;
-  window.roomName = roomName; // зберігаємо для HUD
+  window.roomName = roomName;
+
+  // === ЧАТ ===
+  const chatBox = document.getElementById('chat-box');
+  const chatMessages = document.getElementById('chat-messages');
+  const chatInput = document.getElementById('chat-input');
+  
+  chatBox.classList.remove('hidden');
+
+  // Фокус на чат по Enter
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter' && document.activeElement !== chatInput) {
+      chatInput.focus();
+      e.preventDefault();
+    }
+  });
+
+  // Відправка повідомлення
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter') {
+      const text = chatInput.value.trim();
+      if (text && window.ws && window.ws.readyState === 1) {
+        window.ws.send(JSON.stringify({ type: 'chat', text }));
+        chatInput.value = '';
+      }
+      chatInput.blur();
+    }
+  });
+
+  // Отримання повідомлень
+  if (window.ws) {
+    window.ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'chat') {
+        const div = document.createElement('div');
+        // Робимо ім'я кольоровим
+        div.innerHTML = `<span style="color:#4af;">${msg.playerName}</span>: ${msg.text}`;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+    });
+  }
 }
 
 function spawnAsteroid() {
