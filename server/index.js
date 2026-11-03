@@ -1,8 +1,53 @@
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { EventEmitter } from 'node:events';
+import { createWriteStream, mkdirSync } from 'node:fs';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { join } from 'node:path';
 
 const PORT = process.env.PORT || 3001;
+
+// === Логування (NDJSON) ===
+const LOG_DIR = process.env.LOG_DIR || 'logs';
+mkdirSync(LOG_DIR, { recursive: true });
+
+let ndjsonTransform = null;
+let currentLogFile = null;
+
+function startMatchLog(roomId) {
+  const filename = join(LOG_DIR, `match-${roomId}-${Date.now()}.ndjson`);
+  currentLogFile = createWriteStream(filename);
+  
+  ndjsonTransform = new Transform({
+    objectMode: true,
+    transform(chunk, _encoding, callback) {
+      callback(null, JSON.stringify(chunk) + '\n');
+    },
+  });
+
+  // pipeline з'єднує Transform і WriteStream, обробляючи backpressure
+  pipeline(ndjsonTransform, currentLogFile).catch(err => {
+    console.error('Log pipeline error:', err);
+  });
+  
+  console.log(`Match log started: ${filename}`);
+}
+
+function logEvent(event) {
+  if (ndjsonTransform && ndjsonTransform.writable) {
+    ndjsonTransform.write({
+      timestamp: Date.now(),
+      ...event,
+    });
+  }
+}
+
+function stopMatchLog() {
+  if (ndjsonTransform && ndjsonTransform.writable) {
+    ndjsonTransform.end();
+  }
+}
 
 // === Кімнати ===
 class Room extends EventEmitter {
@@ -18,6 +63,7 @@ class Room extends EventEmitter {
     ws.roomId = this.id;
     ws.playerName = playerName;
     this.emit('join', { playerName });
+    logEvent({ type: 'join', roomId: this.id, playerName });
     for (const msg of this.chatHistory) {
       ws.send(JSON.stringify({ type: 'chat', ...msg }));
     }
@@ -26,8 +72,7 @@ class Room extends EventEmitter {
   leave(ws) {
     this.clients.delete(ws);
     this.emit('leave', { playerName: ws.playerName });
-    // Кімната НЕ видаляється, навіть якщо порожня.
-    // Це дозволяє їй завжди бути в списку.
+    logEvent({ type: 'leave', roomId: this.id, playerName: ws.playerName });
   }
 
   broadcast(message, exclude = null) {
@@ -47,7 +92,6 @@ for (const id of ['alpha', 'beta', 'gamma']) {
   rooms.set(id, new Room(id));
 }
 
-// Допоміжна функція для створення кімнати (якщо раптом немає)
 function getOrCreateRoom(id) {
   if (!rooms.has(id)) {
     rooms.set(id, new Room(id));
@@ -114,8 +158,6 @@ wss.on('connection', (ws) => {
     if (msg.type === 'join') {
       clearTimeout(joinTimeout);
       const { roomId, playerName } = msg;
-      
-      // Використовуємо getOrCreateRoom, щоб кімната точно існувала
       const room = getOrCreateRoom(roomId);
       
       if (room.clients.size >= 8) {
@@ -135,6 +177,9 @@ wss.on('connection', (ws) => {
       const chatMsg = { playerName: ws.playerName, text: msg.text };
       room.chatHistory.push(chatMsg);
       if (room.chatHistory.length > 50) room.chatHistory.shift();
+      
+      logEvent({ type: 'chat', roomId: ws.roomId, playerName: ws.playerName, text: msg.text });
+      
       room.broadcast({ type: 'chat', ...chatMsg });
     } else {
       ws.close(4005, 'Unknown message type');
@@ -174,6 +219,8 @@ wss.on('close', () => {
 });
 
 // === Запуск ===
+startMatchLog('global');
+
 server.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
@@ -181,6 +228,7 @@ server.listen(PORT, () => {
 // === Graceful shutdown ===
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down...');
+  stopMatchLog();
   wss.clients.forEach(ws => ws.close(1001, 'Server shutting down'));
   server.close(() => {
     console.log('Server closed');
