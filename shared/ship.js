@@ -1,7 +1,6 @@
 import { Entity } from './entity.js';
 import { Vector2 } from './vector.js';
 import { Bullet } from './bullet.js';
-import { events } from '../events.js';
 
 export class Ship extends Entity {
   static ROTATION_SPEED = 4.0;
@@ -80,10 +79,6 @@ export class Ship extends Entity {
 
     const nose = Vector2.fromAngle(this.angle, this.radius).add(this.pos);
 
-    // Подія "fired"
-    events.dispatchEvent(new CustomEvent('fired', {
-      detail: { x: nose.x, y: nose.y }
-    }));
 
     return new Bullet(nose.x, nose.y, this.angle, this.vel);
   }

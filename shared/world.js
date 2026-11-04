@@ -1,17 +1,6 @@
-import { detectCollisions, resolveCollisions } from './collision.js';
-
 export class World {
   #entities = new Map();
   #pendingRemoval = [];
-
-  // Callbacks для подій
-  #onExplosion = null;
-  #onScore = null;
-
-  constructor({ onExplosion, onScore } = {}) {
-    this.#onExplosion = onExplosion || (() => {});
-    this.#onScore = onScore || (() => {});
-  }
 
   spawn(entity) {
     this.#entities.set(entity.id, entity);
@@ -40,23 +29,15 @@ export class World {
     }
   }
 
-  
-    step(dt, input, viewWidth, viewHeight) {
-    // 1. Оновлення
+  /**
+   * Оновлює всі сутності. 
+   * Колізії НЕ обробляються тут — вони викликаються ззовні 
+   * (на сервері або в клієнті), щоб World залишався "чистим".
+   */
+  step(dt, input, viewWidth, viewHeight) {
     for (const e of this.#entities.values()) {
       e.update(dt, input, viewWidth, viewHeight);
     }
-
-    // 2. Колізії
-    const collisions = detectCollisions(this);
-    resolveCollisions(
-      collisions,
-      this,
-      (x, y, r) => this.#onExplosion(x, y, r),
-      (score) => this.#onScore(score)
-    );
-
-    // 3. Sweep
     this.#sweep();
   }
 

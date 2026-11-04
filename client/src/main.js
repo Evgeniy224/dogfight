@@ -1,19 +1,20 @@
 import { createLoop } from './loop.js';
 import { createInput } from './input.js';
-import { Ship } from './sim/ship.js';
-import { World } from './sim/world.js';
-import { Asteroid } from './sim/asteroid.js';
+import { loadAll, fetchJson } from './load.js';
+import { setAudioContext, setBuffer, unlockAudio } from './audio.js';
+import { events } from './events.js';
+import { Lobby } from './lobby.js';
+import { detectCollisions, resolveCollisions } from './sim/collision.js';
+
+// Імпорти з shared/
+import { Ship } from '../../shared/ship.js';
+import { World } from '../../shared/world.js';
+import { Asteroid } from '../../shared/asteroid.js';
+
+// Локальні імпорти для рендерингу
 import { Explosion } from './sim/explosion.js';
 import { Pickup } from './sim/pickup.js';
 import { createHoming } from './sim/behaviors.js';
-import { loadAll, fetchJson } from './load.js';
-
-// === ЗВУК ===
-import { setAudioContext, setBuffer, unlockAudio } from './audio.js';
-import { events } from './events.js';
-
-// === ЛОБІ ===
-import { Lobby } from './lobby.js';
 
 // --- Canvas ---
 const canvas = document.getElementById('game');
@@ -36,16 +37,12 @@ resizeCanvas();
 
 // --- HUD ---
 const hudElement = document.getElementById('hud');
-
-// --- Loading UI ---
 const loadingScreen = document.getElementById('loading-screen');
 const progressFill = document.getElementById('progress-fill');
 const progressText = document.getElementById('progress-text');
 
-// --- Глобальні ресурси ---
+// --- Стан ---
 let assets = null;
-
-// --- Стан гри ---
 let world, ship, input, score = 0, respawnTimer = 0;
 let prevShip = null;
 let loop = null;
@@ -74,7 +71,6 @@ async function start() {
     return;
   }
 
-  // === ДЕКОДУВАННЯ ЗВУКІВ ===
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     setAudioContext(audioCtx);
@@ -87,13 +83,11 @@ async function start() {
     console.warn('Audio decode failed:', e);
   }
 
-  // === РОЗБЛОКУВАННЯ АУДІО ПРИ ПЕРШОМУ ЖЕСТІ ===
   window.addEventListener('keydown', unlockAudio, { once: true });
   window.addEventListener('click', unlockAudio, { once: true });
 
   loadingScreen.classList.add('hidden');
 
-  // === ЛОБІ ===
   const lobby = new Lobby();
   lobby.addEventListener('join', (e) => {
     const { room, playerName, ws } = e.detail;
@@ -106,32 +100,21 @@ async function start() {
 
 function initGame(room) {
   const roomName = room?.name || 'Unknown';
-
   input = createInput(window);
 
-  world = new World({
-    onExplosion: (x, y, r) => {
-      world.spawn(new Explosion(x, y, r));
-    },
-    onScore: (points) => {
-      score += points;
-    },
-  });
+  world = new World(); // World більше не приймає колбеки
 
   ship = world.spawn(new Ship(viewWidth / 2, viewHeight / 2));
   respawnTimer = 0;
   shotCounter = 0;
 
   for (let i = 0; i < 12; i++) spawnAsteroid();
-
   world.spawn(new Pickup(viewWidth * 0.3, viewHeight * 0.3, 'shield'));
   world.spawn(new Pickup(viewWidth * 0.7, viewHeight * 0.7, 'rapid_fire'));
 
   prevShip = {
-    x: ship.pos.x,
-    y: ship.pos.y,
-    angle: ship.angle,
-    thrust: ship.thrust,
+    x: ship.pos.x, y: ship.pos.y,
+    angle: ship.angle, thrust: ship.thrust,
   };
 
   window.addEventListener('keydown', (e) => {
@@ -145,10 +128,7 @@ function initGame(room) {
           let nearestDist = Infinity;
           for (const ast of world.ofKind('asteroid')) {
             const d = Math.hypot(ast.pos.x - ship.pos.x, ast.pos.y - ship.pos.y);
-            if (d < nearestDist) {
-              nearestDist = d;
-              nearest = ast;
-            }
+            if (d < nearestDist) { nearestDist = d; nearest = ast; }
           }
           bullet.homingTarget = nearest;
         }
@@ -157,33 +137,25 @@ function initGame(room) {
     }
   });
 
-  loop = createLoop({
-    step: 1 / 60,
-    simulate,
-    render,
-  });
+  loop = createLoop({ step: 1 / 60, simulate, render });
   loop.start();
 
   window.loop = loop;
   window.world = world;
   window.roomName = roomName;
 
-  // === ЧАТ ===
+  // Чат
   const chatBox = document.getElementById('chat-box');
   const chatMessages = document.getElementById('chat-messages');
   const chatInput = document.getElementById('chat-input');
-  
   chatBox.classList.remove('hidden');
 
-  // Фокус на чат по Enter
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Enter' && document.activeElement !== chatInput) {
-      chatInput.focus();
-      e.preventDefault();
+      chatInput.focus(); e.preventDefault();
     }
   });
 
-  // Відправка повідомлення
   chatInput.addEventListener('keydown', (e) => {
     if (e.code === 'Enter') {
       const text = chatInput.value.trim();
@@ -195,13 +167,11 @@ function initGame(room) {
     }
   });
 
-  // Отримання повідомлень
   if (window.ws) {
     window.ws.addEventListener('message', (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'chat') {
         const div = document.createElement('div');
-        // Робимо ім'я кольоровим
         div.innerHTML = `<span style="color:#4af;">${msg.playerName}</span>: ${msg.text}`;
         chatMessages.appendChild(div);
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -212,10 +182,8 @@ function initGame(room) {
 
 function spawnAsteroid() {
   let x, y;
-  do {
-    x = Math.random() * viewWidth;
-    y = Math.random() * viewHeight;
-  } while (Math.hypot(x - ship.pos.x, y - ship.pos.y) < 200);
+  do { x = Math.random() * viewWidth; y = Math.random() * viewHeight; }
+  while (Math.hypot(x - ship.pos.x, y - ship.pos.y) < 200);
 
   const vx = (Math.random() - 0.5) * 100;
   const vy = (Math.random() - 0.5) * 100;
@@ -224,13 +192,22 @@ function spawnAsteroid() {
 
 function simulate(dt) {
   if (ship.alive) {
-    prevShip.x = ship.pos.x;
-    prevShip.y = ship.pos.y;
-    prevShip.angle = ship.angle;
-    prevShip.thrust = ship.thrust;
+    prevShip.x = ship.pos.x; prevShip.y = ship.pos.y;
+    prevShip.angle = ship.angle; prevShip.thrust = ship.thrust;
   }
 
+  // 1. Оновлюємо сутності
   world.step(dt, input, viewWidth, viewHeight);
+
+  // 2. Обробляємо колізії (тепер це робиться тут, а не в World.step)
+  const collisions = detectCollisions(world);
+  resolveCollisions(
+    collisions,
+    world,
+    (x, y, r) => world.spawn(new Explosion(x, y, r)),
+    (points) => { score += points; },
+    () => {} // onSplitAsteroid
+  );
 
   if (ship.alive) {
     if (ship.pos.x < 0) ship.pos.x += viewWidth;
@@ -242,13 +219,10 @@ function simulate(dt) {
     if (respawnTimer >= 2) {
       respawnTimer = 0;
       ship = world.spawn(new Ship(viewWidth / 2, viewHeight / 2));
-      prevShip.x = ship.pos.x;
-      prevShip.y = ship.pos.y;
-      prevShip.angle = ship.angle;
-      prevShip.thrust = ship.thrust;
+      prevShip.x = ship.pos.x; prevShip.y = ship.pos.y;
+      prevShip.angle = ship.angle; prevShip.thrust = ship.thrust;
     }
   }
-
   input.endFrame();
 }
 
@@ -312,7 +286,6 @@ function drawShip(s) {
   ctx.save();
   ctx.translate(s.x, s.y);
   ctx.rotate(s.angle);
-
   if (assets?.images?.ship) {
     ctx.drawImage(assets.images.ship, -15, -15, 30, 30);
   } else {
@@ -321,19 +294,12 @@ function drawShip(s) {
     ctx.fillStyle = '#4af'; ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   }
-
   if (s.thrust) {
     ctx.beginPath();
-    ctx.moveTo(-10, -6);
-    ctx.lineTo(-20 - Math.random() * 8, 0);
-    ctx.lineTo(-10, 6);
-    ctx.closePath();
-    ctx.fillStyle = 'orange';
-    ctx.fill();
+    ctx.moveTo(-10, -6); ctx.lineTo(-20 - Math.random() * 8, 0); ctx.lineTo(-10, 6);
+    ctx.closePath(); ctx.fillStyle = 'orange'; ctx.fill();
   }
-
   ctx.restore();
 }
 
-// --- Запуск ---
 start();

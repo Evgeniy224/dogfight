@@ -1,4 +1,4 @@
-import { Entity } from './entity.js';
+import { Entity } from '../../../shared/entity.js';
 import { createPickup } from './behaviors.js';
 
 export class Pickup extends Entity {
@@ -9,29 +9,20 @@ export class Pickup extends Entity {
     this.type = type;
     this.lifetime = 15;
     this.pulse = 0;
-
-    // === КОМПОЗИЦІЯ ===
-    // Додаємо поведінку pickup як поле.
-    // Тепер Pickup не "extends" якийсь PickupBase — він має поведінку.
     this.pickupBehavior = createPickup(type);
-    // === КІНЕЦЬ ===
   }
 
   update(dt) {
     this.pulse += dt * 4;
     this.lifetime -= dt;
-    if (this.lifetime <= 0) {
-      this.kill();
-    }
+    if (this.lifetime <= 0) this.kill();
   }
 
   draw(ctx) {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
-
     const scale = 1 + Math.sin(this.pulse) * 0.1;
     ctx.scale(scale, scale);
-
     const color = this.type === 'shield' ? '#4f4' : '#ff4';
 
     ctx.beginPath();
@@ -44,13 +35,10 @@ export class Pickup extends Entity {
     if (this.type === 'shield') {
       ctx.arc(0, 0, this.radius * 0.5, 0, Math.PI * 2);
     } else {
-      ctx.moveTo(-4, -4);
-      ctx.lineTo(4, 0);
-      ctx.lineTo(-4, 4);
+      ctx.moveTo(-4, -4); ctx.lineTo(4, 0); ctx.lineTo(-4, 4);
     }
     ctx.fillStyle = color;
     ctx.fill();
-
     ctx.restore();
   }
 }
