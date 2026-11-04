@@ -121,6 +121,10 @@ function initGame(room) {
     if (e.code === 'Space' && ship.alive) {
       const bullet = ship.fire();
       if (bullet) {
+        // === ПОВЕРТАЄМО ЗВУК ПОСТРІЛУ ===
+        events.dispatchEvent(new CustomEvent('fired', { detail: { x: bullet.pos.x, y: bullet.pos.y } }));
+        // ===============================
+        
         shotCounter++;
         if (shotCounter % 5 === 0) {
           bullet.homing = createHoming(4.0);
