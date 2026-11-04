@@ -11,7 +11,7 @@ import { Ship } from '../../shared/ship.js';
 import { World } from '../../shared/world.js';
 import { Asteroid } from '../../shared/asteroid.js';
 
-// Локальні імпорти для рендерингу
+// Локальні імпорти
 import { Explosion } from './sim/explosion.js';
 import { Pickup } from './sim/pickup.js';
 import { createHoming } from './sim/behaviors.js';
@@ -48,25 +48,27 @@ let prevShip = null;
 let loop = null;
 let shotCounter = 0;
 
+// === ДЛЯ ІНТЕРПОЛЯЦІЇ МЕРЕЖІ ===
+let lastSnapshot = null;
+let currSnapshot = null;
+let snapshotTime = 0;
+
 // --- Старт ---
 async function start() {
   let manifest;
   try {
     manifest = await fetchJson('/assets/manifest.json');
   } catch (e) {
-    console.error('Failed to load manifest:', e);
     loadingScreen.innerHTML = '<h1 style="color:red;">Failed to load manifest</h1><button onclick="location.reload()">Retry</button>';
     return;
   }
 
   try {
     assets = await loadAll(manifest, (loaded, total) => {
-      const percent = (loaded / total) * 100;
-      progressFill.style.width = `${percent}%`;
+      progressFill.style.width = `${(loaded / total) * 100}%`;
       progressText.textContent = `${loaded} / ${total}`;
     });
   } catch (e) {
-    console.error('Failed to load assets:', e);
     loadingScreen.innerHTML = '<h1 style="color:red;">Failed to load assets</h1><button onclick="location.reload()">Retry</button>';
     return;
   }
@@ -78,7 +80,6 @@ async function start() {
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
       setBuffer(name, audioBuffer);
     }
-    console.log('Audio decoded:', Object.keys(assets.sounds));
   } catch (e) {
     console.warn('Audio decode failed:', e);
   }
@@ -91,7 +92,6 @@ async function start() {
   const lobby = new Lobby();
   lobby.addEventListener('join', (e) => {
     const { room, playerName, ws } = e.detail;
-    console.log('Joining room:', room.name, 'as', playerName);
     window.ws = ws;
     initGame(room);
   });
@@ -102,44 +102,59 @@ function initGame(room) {
   const roomName = room?.name || 'Unknown';
   input = createInput(window);
 
-  world = new World(); // World більше не приймає колбеки
-
-  ship = world.spawn(new Ship(viewWidth / 2, viewHeight / 2));
+  world = new World();
+  ship = world.spawn(new Ship(1920 / 2, 1080 / 2));
   respawnTimer = 0;
   shotCounter = 0;
 
   for (let i = 0; i < 12; i++) spawnAsteroid();
-  world.spawn(new Pickup(viewWidth * 0.3, viewHeight * 0.3, 'shield'));
-  world.spawn(new Pickup(viewWidth * 0.7, viewHeight * 0.7, 'rapid_fire'));
+  world.spawn(new Pickup(1920 * 0.3, 1080 * 0.3, 'shield'));
+  world.spawn(new Pickup(1920 * 0.7, 1080 * 0.7, 'rapid_fire'));
 
-  prevShip = {
-    x: ship.pos.x, y: ship.pos.y,
-    angle: ship.angle, thrust: ship.thrust,
-  };
+  prevShip = { x: ship.pos.x, y: ship.pos.y, angle: ship.angle, thrust: ship.thrust };
 
+  // === ОНОВЛЕНО: ПОСТРІЛ З ВІЗУАЛЬНОЇ ПОЗИЦІЇ ===
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && ship.alive) {
+      // Отримуємо поточну візуальну позицію корабля
+      let visualX = ship.pos.x;
+      let visualY = ship.pos.y;
+      let visualAngle = ship.angle;
+
+      if (lastSnapshot && currSnapshot) {
+        const t = Math.min((performance.now() - snapshotTime) / (1000 / 30), 1);
+        visualX = lerp(lastSnapshot.x, currSnapshot.x, t);
+        visualY = lerp(lastSnapshot.y, currSnapshot.y, t);
+        visualAngle = lerpAngle(lastSnapshot.angle, currSnapshot.angle, t);
+      } else if (currSnapshot) {
+        visualX = currSnapshot.x;
+        visualY = currSnapshot.y;
+        visualAngle = currSnapshot.angle;
+      }
+
+      // Тимчасово переміщуємо корабель у візуальну позицію, щоб куля створилася правильно
+      const originalX = ship.pos.x;
+      const originalY = ship.pos.y;
+      const originalAngle = ship.angle;
+      
+      ship.pos.x = visualX;
+      ship.pos.y = visualY;
+      ship.angle = visualAngle;
+      
       const bullet = ship.fire();
+      
+      // Повертаємо корабель назад
+      ship.pos.x = originalX;
+      ship.pos.y = originalY;
+      ship.angle = originalAngle;
+
       if (bullet) {
-        // === ПОВЕРТАЄМО ЗВУК ПОСТРІЛУ ===
         events.dispatchEvent(new CustomEvent('fired', { detail: { x: bullet.pos.x, y: bullet.pos.y } }));
-        // ===============================
-        
-        shotCounter++;
-        if (shotCounter % 5 === 0) {
-          bullet.homing = createHoming(4.0);
-          let nearest = null;
-          let nearestDist = Infinity;
-          for (const ast of world.ofKind('asteroid')) {
-            const d = Math.hypot(ast.pos.x - ship.pos.x, ast.pos.y - ship.pos.y);
-            if (d < nearestDist) { nearestDist = d; nearest = ast; }
-          }
-          bullet.homingTarget = nearest;
-        }
         world.spawn(bullet);
       }
     }
   });
+  // ===================================================
 
   loop = createLoop({ step: 1 / 60, simulate, render });
   loop.start();
@@ -171,6 +186,7 @@ function initGame(room) {
     }
   });
 
+  // Слухаємо сервер
   if (window.ws) {
     window.ws.addEventListener('message', (event) => {
       const msg = JSON.parse(event.data);
@@ -179,6 +195,10 @@ function initGame(room) {
         div.innerHTML = `<span style="color:#4af;">${msg.playerName}</span>: ${msg.text}`;
         chatMessages.appendChild(div);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+      } else if (msg.type === 'snapshot') {
+        lastSnapshot = currSnapshot;
+        currSnapshot = msg.ship;
+        snapshotTime = performance.now();
       }
     });
   }
@@ -186,9 +206,8 @@ function initGame(room) {
 
 function spawnAsteroid() {
   let x, y;
-  do { x = Math.random() * viewWidth; y = Math.random() * viewHeight; }
+  do { x = Math.random() * 1920; y = Math.random() * 1080; }
   while (Math.hypot(x - ship.pos.x, y - ship.pos.y) < 200);
-
   const vx = (Math.random() - 0.5) * 100;
   const vy = (Math.random() - 0.5) * 100;
   world.spawn(new Asteroid(x, y, vx, vy, Math.floor(Math.random() * 3)));
@@ -200,31 +219,37 @@ function simulate(dt) {
     prevShip.angle = ship.angle; prevShip.thrust = ship.thrust;
   }
 
-  // 1. Оновлюємо сутності
-  world.step(dt, input, viewWidth, viewHeight);
+  // Відправляємо інпути на сервер
+  if (window.ws && window.ws.readyState === 1) {
+    window.ws.send(JSON.stringify({
+      type: 'input',
+      up: input.isDown('ArrowUp') || input.isDown('KeyW'),
+      left: input.isDown('ArrowLeft') || input.isDown('KeyA'),
+      right: input.isDown('ArrowRight') || input.isDown('KeyD'),
+    }));
+  }
 
-  // 2. Обробляємо колізії (тепер це робиться тут, а не в World.step)
+  // Рухаємо локально
+  world.step(dt, input, 1920, 1080);
+
   const collisions = detectCollisions(world);
   resolveCollisions(
-    collisions,
-    world,
+    collisions, world,
     (x, y, r) => world.spawn(new Explosion(x, y, r)),
     (points) => { score += points; },
-    () => {} // onSplitAsteroid
+    () => {}
   );
 
   if (ship.alive) {
-    if (ship.pos.x < 0) ship.pos.x += viewWidth;
-    if (ship.pos.x > viewWidth) ship.pos.x -= viewWidth;
-    if (ship.pos.y < 0) ship.pos.y += viewHeight;
-    if (ship.pos.y > viewHeight) ship.pos.y -= viewHeight;
+    if (ship.pos.x < 0) ship.pos.x += 1920;
+    if (ship.pos.x > 1920) ship.pos.x -= 1920;
+    if (ship.pos.y < 0) ship.pos.y += 1080;
+    if (ship.pos.y > 1080) ship.pos.y -= 1080;
   } else {
     respawnTimer += dt;
     if (respawnTimer >= 2) {
       respawnTimer = 0;
-      ship = world.spawn(new Ship(viewWidth / 2, viewHeight / 2));
-      prevShip.x = ship.pos.x; prevShip.y = ship.pos.y;
-      prevShip.angle = ship.angle; prevShip.thrust = ship.thrust;
+      ship = world.spawn(new Ship(1920 / 2, 1080 / 2));
     }
   }
   input.endFrame();
@@ -248,11 +273,27 @@ function render(alpha) {
     e.draw(ctx);
   }
 
-  if (ship.alive) {
+  // === ІНТЕРПОЛЯЦІЯ КОРАБЛЯ ===
+  if (ship.alive && currSnapshot) {
+    let drawX = ship.pos.x;
+    let drawY = ship.pos.y;
+    let drawAngle = ship.angle;
+
+    if (lastSnapshot && currSnapshot) {
+      const t = Math.min((performance.now() - snapshotTime) / (1000 / 30), 1);
+      drawX = lerp(lastSnapshot.x, currSnapshot.x, t);
+      drawY = lerp(lastSnapshot.y, currSnapshot.y, t);
+      drawAngle = lerpAngle(lastSnapshot.angle, currSnapshot.angle, t);
+    } else if (currSnapshot) {
+      drawX = currSnapshot.x;
+      drawY = currSnapshot.y;
+      drawAngle = currSnapshot.angle;
+    }
+
     const interpShip = {
-      x: lerp(prevShip.x, ship.pos.x, alpha),
-      y: lerp(prevShip.y, ship.pos.y, alpha),
-      angle: lerpAngle(prevShip.angle, ship.angle, alpha),
+      x: drawX,
+      y: drawY,
+      angle: drawAngle,
       thrust: ship.thrust,
     };
     drawShip(interpShip);

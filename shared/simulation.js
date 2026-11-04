@@ -15,7 +15,6 @@ export function createWorld(width, height, seed = 1) {
   const ship = world.spawn(new Ship(width / 2, height / 2));
   
   // Створюємо астероїди (детерміновано, якщо треба)
-  // Поки що просто випадково, але в майбутньому можна зробити через seed
   for (let i = 0; i < 12; i++) {
     let x, y;
     do {
