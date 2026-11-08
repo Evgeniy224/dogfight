@@ -4,12 +4,14 @@
   "type": "module",
   "workspaces": [
     "client",
-    "server"
+    "server",
+    "shared"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=client",
     "dev:server": "node --watch server/index.js",
-    "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\""
+    "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
+    "test": "node --test shared/*.test.js"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

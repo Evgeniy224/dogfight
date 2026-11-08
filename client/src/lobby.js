@@ -52,17 +52,34 @@ export class Lobby extends EventTarget {
   }
 
   #connectAndJoin(roomId, playerName) {
-    this.#ws = new WebSocket(`ws://${location.host}/ws`);
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.#ws = new WebSocket(`${protocol}//${location.host}/ws`);
+    this.#ws.binaryType = 'arraybuffer';
+    const params = new URLSearchParams(location.search);
 
     this.#ws.onopen = () => {
-      this.#ws.send(JSON.stringify({ type: 'join', roomId, playerName }));
+      this.#ws.send(JSON.stringify({
+        type: 'join', roomId, playerName,
+        codec: params.get('codec') === 'json' ? 'json' : 'binary',
+        network: {
+          latency: params.has('latency') ? Number(params.get('latency')) : 100,
+          jitter: params.has('jitter') ? Number(params.get('jitter')) : 30,
+          drop: params.has('drop') ? Number(params.get('drop')) : 0.02,
+        },
+      }));
     };
 
     this.#ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+      if (typeof event.data !== 'string') return;
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        return;
+      }
       if (msg.type === 'joined') {
         this.dispatchEvent(new CustomEvent('join', {
-          detail: { room: this.#selectedRoom, playerName, ws: this.#ws }
+          detail: { room: this.#selectedRoom, playerName, ws: this.#ws, session: msg }
         }));
         this.#lobbyElement.classList.add('hidden');
       } else if (msg.type === 'chat') {
