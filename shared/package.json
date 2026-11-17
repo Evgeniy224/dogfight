@@ -3,8 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
   "exports": {
-    "./network": "./network.js",
-    "./rng": "./rng.js"
+    "./network": "./network.ts",
+    "./rng": "./rng.ts"
+  },
+  "dependencies": {
+    "zod": "^3.25.67"
   }
 }

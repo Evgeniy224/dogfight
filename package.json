@@ -9,12 +9,17 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=client",
-    "dev:server": "node --watch server/index.js",
+    "dev:server": "tsx watch server/index.ts",
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
-    "test": "node --test shared/*.test.js"
+    "test": "tsx --test shared/*.test.ts",
+    "typecheck": "npm run typecheck --workspace=shared && npm run typecheck --workspace=server && npm run typecheck --workspace=client"
   },
   "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.0.0",
-    "terminal-graph": "^1.3.0"
+    "terminal-graph": "^1.3.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
   }
 }
